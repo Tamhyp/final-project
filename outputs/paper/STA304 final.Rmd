@@ -1,0 +1,262 @@
+---
+title: "What is the main effect of the admission rate in the US"
+author: "Yuping Hao"
+date: "2022/4/25"
+header-includes:
+    - \usepackage{setspace}\doublespacing
+fontsize: 12pt
+subtitle: "Personal and official factors play a role"
+abstract: "It is common for applicants to review a school's basic information and characteristics before they decide to apply for the school. Applicants need to compete with others. Hence, they are willing to know the opportunity of getting an offer. In this paper,we are going to examine the admission rate of a large amount of universities/colleges in U.S and try to predict the admission rate for a given university.\\par\\textbf{Keywords: admission rate,universities,applicants}"
+output: 
+  bookdown::pdf_book:
+thanks: "Codes and data are in: https://github.com/Tamhyp/final-project"
+bibliography: ref.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+# Introduction
+
+Admission rate is the rate of being accepted. It is calculated by dividing the number of accepted students by total number of applicants. Admission rate varies from university to university and this may be the result of various reasons, including types of university, facilities and equipment of different campus, tuition fee and some other preferences in applicants. We need to decide factors that affects admission rate first, then describe and understand the relationship between admission rate and these factors.
+
+The aim of this paper is to fit a linear regression model which describes the relationship between admission rate and predictors most precisely in our population of 1,508 observations of universities and colleges in US. The goal of this paper is to help various stakeholders to understand the relationship by using the model. Also, we should be able to make predictions of admission rate if we are given a new university in future.
+
+This paper used R[@R] language to do the analysis, with package tidyverse[@tidyverse], ggplot[@ggplot2], Venables[@Venables], Metrics[@Metrics], and with some external resources.[@Datahome] [@NBER]
+
+\newpage
+# Data
+
+This data set includes 1,508 observations of universities and colleges in United States. It is derived from a larger collection of measures on schools in the United States (https://collegescorecard.ed.gov/data/)[1].This is the official website of U.S department of education.The original data set contains all cumulative information from 1996 to 2020,and our initial selection of this data set is to take a subset with annually report of 2018 and 30 primary variables.
+
+The data set has 30 variables, with one response variable (ADM_RATE) and 29 possible predictor variables. The variables are divided into 3 categories: school identifiers, school characteristics and applicant distribution(mainly on race).
+
+Since there are 29 predictor variables and 1 response variable,we need to examine the predictor variables first. The UNITID,INSTNM are name and coding(identifiers) of schools,hence each university will have a unique UNITID and INSTUM.So these are not predictor variables.The STABBR(the state postcode) is a factor variable with approximately 15 values,this will decrease the accuracy and elegance of the final model.So we exclude this factor.
+
+Now we make quantitative analysis.Specifically, researchers find that the unemployment rate, median wages, and wage inequality in the lower half of the wage distribution all are significant determinants of poverty rates.[2] We test whether the result is similar in our case.
+
+```{r ,echo=FALSE, message=FALSE, warning=FALSE}
+adm<-read.csv('admission.csv',header = T)
+
+
+set.seed(104)
+head(adm)
+```
+
+```{r}
+plot(adm[30:31],main = 'scatterplot of poverty rate vs unemployment rate')
+```
+
+
+
+Based on our consensus,we also know that the education level is correlated.Basically,higher bachelor's degree rate will lead to a higher professional rate.We test this assumption.
+
+```{r}
+plot(adm[27:28],main = 'scatterplot of pct_bachelor and pct_prof')
+```
+
+We also examines the race relation.
+
+```{r}
+plot(adm[23:26],main = 'pair correlation between race percentages')
+```
+
+The negative correlation seems to be apparent in PCT_WHITE,PCT_BLACK and PCT_WHITE,PCT_ASIAN.
+
+```{r}
+cor(adm[23:31])
+```
+
+So we exclude UNEMP_RATE,PCT_BLACK,PCT_GRAD_PROF first.
+
+# Model
+
+We need to split the data set into training set and testing set(75-25 ratio) and exclude the 7 variables as we mentioned.
+
+```{r}
+adm_sel<-adm[,-c(1:4,24,28,31)]
+set.seed(2)
+sample<-sample.int(n=1508,size=1131,replace=F)
+train<-adm_sel[sample,]
+test<-adm_sel[-sample,]
+ncol(train)
+```
+Based on the multiple regression model,we start with full model and use stepwise method to find the appropriate model.
+
+```{r}
+model_full<-lm(ADM_RATE ~ .,data=train)
+summary(model_full)
+```
+
+More than half of the predictor variables are not significant.Though the overall model is significant,we have to limit the number of predictor variables.
+
+```{r,results = 'hide'}
+library(MASS)
+stepAIC(lm(ADM_RATE ~ 1, data=train),
+scope=list(upper=lm(ADM_RATE ~ ., data = train)),
+direction = "forward", k=2)
+stepAIC(lm(ADM_RATE ~ ., data=train),
+scope=list(lower=lm(ADM_RATE ~ 1, data = train)),
+direction = "backward", k=2)
+stepAIC(lm(ADM_RATE ~ 1, data=train),
+scope=list(upper=lm(ADM_RATE ~ ., data = train)),
+direction = "forward", k=log(nrow(train)))
+stepAIC(lm(ADM_RATE ~ ., data=train),
+scope=list(lower=lm(ADM_RATE ~ 1, data = train)),
+direction = "backward", k=log(nrow(train)))
+
+```
+
+
+```{r,results = 'hide'}
+stepAIC(lm(ADM_RATE ~ ., data=train), direction = "both", k=2)
+stepAIC(lm(ADM_RATE ~ ., data=train), direction = "both", k=log(nrow(train)))
+```
+
+Based on the selection, we have four final models.
+
+Model 1: lm(formula = ADM_RATE ~ AVGFACSAL + CONTROL + POVERTY_RATE + HBCU + COSTT4_A + NUMBRANCH + FEMALE + PFTFAC + MD_FAMINC + HSI + PCT_BORN_US + REGION, data = train_set0) with 12 predictor variables 
+
+Model 2: lm(formula = ADM_RATE ~ NUMBRANCH + CONTROL + REGION + TRIBAL +  HSI + COSTT4_A + AVGFACSAL + PFTFAC + PAR_ED_PCT_1STGEN + FEMALE + MD_FAMINC + PCT_WHITE + PCT_HISPANIC + PCT_BA, data = train_set0) with 14 predictor variables 
+
+Model 3: lm(formula = ADM_RATE ~ AVGFACSAL + CONTROL + POVERTY_RATE + HBCU + COSTT4_A + NUMBRANCH + FEMALE, data = train_set0) with 7 predictor variables 
+
+Model 4: lm(formula = ADM_RATE ~ NUMBRANCH + HSI + COSTT4_A + AVGFACSAL + PFTFAC + FEMALE + MD_FAMINC + PCT_WHITE + PCT_HISPANIC, data = train_set0) with 9 predictor variables
+
+```{r}
+model1<-lm(formula = ADM_RATE ~ AVGFACSAL + CONTROL + POVERTY_RATE + HBCU + COSTT4_A + NUMBRANCH + FEMALE + PFTFAC + MD_FAMINC + HSI + PCT_BORN_US + REGION, data = train)
+
+model2<-lm(formula = ADM_RATE ~ NUMBRANCH + CONTROL + REGION + TRIBAL +  HSI + COSTT4_A + AVGFACSAL + PFTFAC + PAR_ED_PCT_1STGEN + FEMALE + MD_FAMINC + PCT_WHITE + PCT_HISPANIC + PCT_BA, data = train) 
+
+model3<-lm(formula = ADM_RATE ~ AVGFACSAL + CONTROL + POVERTY_RATE + HBCU + COSTT4_A + NUMBRANCH + FEMALE, data = train) 
+
+model4<-lm(formula = ADM_RATE ~ NUMBRANCH + HSI + COSTT4_A + AVGFACSAL + PFTFAC + FEMALE + MD_FAMINC + PCT_WHITE + PCT_HISPANIC, data = train)
+
+```
+
+
+Now we compare these models based on the selection criteria:AIC/BIC/AICc
+
+```{r}
+select_criteria = function(model, n)
+{
+SSres <- sum(model$residuals^2)
+5
+Rsq_adj <- summary(model)$adj.r.squared
+p <- length(model$coefficients) - 1
+AIC <- n*log(SSres/n) + 2*p
+AICc <- AIC + (2*(p+2)*(p+3)/(n-p-1))
+BIC <- n*log(SSres/n) + (p+2)*log(n)
+res <- c(SSres, Rsq_adj, AIC, AICc, BIC,p)
+names(res) <- c("SSres", "Rsq_adj", "AIC", "AIC_c", "BIC","p")
+return(res)
+}
+n<-nrow(train)
+results<-rbind(select_criteria(model1,n),select_criteria(model2,n),select_criteria(model3,n),select_criteria(model4,n))
+results
+```
+The $R^2$ value is quite similar in all four cases as well as all selection criteria.
+We then compare the MAE and RMSE.
+
+```{r ,echo=FALSE, message=FALSE, warning=FALSE}
+#install.packages("Metrics")
+```
+
+
+```{r}
+library(Metrics)
+genError <-function(prediction,actual)
+    return(list(MAE = signif(mae(actual,prediction),4),RMSE = signif(rmse(actual,prediction),4)))
+
+
+model1.pred<-predict(model1,test)
+error = genError(model1.pred,test$ADM_RATE)
+model1.results<-data.frame(MAE = error$MAE,RMSE = error$RMSE,model = "model1")
+model1.results
+
+model2.pred<-predict(model2,test)
+error = genError(model2.pred,test$ADM_RATE)
+model2.results<-data.frame(MAE = error$MAE,RMSE = error$RMSE,model = "model2")
+model2.results
+
+
+model3.pred<-predict(model3,test)
+error = genError(model3.pred,test$ADM_RATE)
+model3.results<-data.frame(MAE = error$MAE,RMSE = error$RMSE,model = "model3")
+model3.results
+
+model4.pred<-predict(model4,test)
+error = genError(model4.pred,test$ADM_RATE)
+model4.results<-data.frame(MAE = error$MAE,RMSE = error$RMSE,model = "model4")
+model4.results
+
+```
+
+
+
+In this case,we decide to use the model with least predictor variables.We choose model 3.
+
+```{r}
+qqnorm(rstudent(model3))
+qqline(rstudent(model3))
+```
+
+The normality of the assumption is satisfied.
+
+```{r}
+plot(rstandard(model3) ~ train$POVERTY_RATE,xlab="POVERTY_RATE",ylab="Residuals")
+```
+
+There's a pattern of residuals in the residual plot. The residuals might be correlated with each other.
+
+Note that there are outliers in the model. We need to exclude the outliers.
+
+```{r}
+h <- hatvalues(model3)
+threshold <- 2 * (length(model3$coefficients)/nrow(train))
+w <- which(h > threshold)
+
+
+```
+```{r}
+train_new<-train[-w,]
+```
+
+```{r}
+model_up<-lm(formula = ADM_RATE ~ AVGFACSAL + CONTROL + POVERTY_RATE + HBCU + COSTT4_A + NUMBRANCH + FEMALE, data = train_new) 
+summary(model_up)
+```
+
+Excluding the outliers doesn;t necessarily improve the quality of the original fitting model.Since there are approximately 10% of the data are identified as outliers,we decided to include these outliers in the final model.
+
+```{r}
+model3_train<-predict(model3,train)
+error_train = genError(model3_train,train$ADM_RATE)
+model3_train_results<-data.frame(MAE = error_train$MAE,RMSE = error_train$RMSE,model = "model3")
+model3_train_results
+model3.results
+```
+
+Our final step insures that the RMSE for the training set and testing set are approximately the same. Thus,there's no overfitting or underfitting of the data.
+
+# Results
+
+Our final model is:
+
+```{r}
+summary(model3)
+```
+
+All of them are significantly different from zero.
+
+# Discussion
+
+It is obvious that this predictor variable has 7 predictor variables. No transformation on the predictor variable is implemented,so we may need to test the normality of the data by using histogram for further research.
+
+Based on the introduction we made in first section, it is obvious that the admission rate is related to school identifiers (Number of branch, HSI),school characteristics (COSTT4_A,AVGFACSAL,PFTFAC,FEMALE) and student population characteristics (MD_FAMINC,PCT_WHITE and PCT_HISPANIC). So all these 3 categories are useful in predicting the admission rate for American universities/colleges. The most important variables are AVGFACSAL,FEMALE,NUMBRANCH and MD_FAMINC. The factors related to the student population characteristics are hard to change, but we can view the school characteristics as a guide when we select the universities/colleges.
+
+\newpage
+# Reference
+
